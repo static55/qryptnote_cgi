@@ -1,0 +1,53 @@
+#!/bin/bash
+
+currentDir=`pwd`
+
+# find the root directory of project
+while [ "${PWD##*/}" != "qrypt_cgi" ]; do
+    cd ..
+    if [ "`pwd`" == "/" ]; then
+	echo "ERROR: Couldn't find directory: qrypt_cgi."
+	cd ${currentDir}
+	exit 1
+    fi
+done
+
+
+echo ""
+echo -n "Enter m3@m3.sdf.org password: "
+read password
+
+make
+
+if [ $? -ne 0 ]; then
+    echo "ERROR: make failed."
+    cd ${currentDir}
+    exit 1
+fi
+
+tar -cjf dev.tar.bz2 cgic Makefile qrypt.c base64.c base64.h
+
+sshpass -f <(printf '%s\n' ${password}) sftp -oBatchMode=no -b bin/sftp_batch_cmds m3@m3.sdf.org
+
+if [ $? -ne 0 ]; then
+    echo "ERROR: Failed to upload qrypt build env"
+    cd ${currentDir}
+    exit 1
+fi
+
+rm dev.tar.bz2
+
+sshpass -f <(printf '%s\n' ${password}) ssh m3@m3.sdf.org >/dev/null 2>/dev/null << 'ENDSSH' 
+rm -rf ~/src/qrypt
+mkdir ~/src/qrypt
+mv dev.tar.bz2 ~/src/qrypt
+cd ~/src/qrypt
+tar -xjf dev.tar.bz2
+make
+mkdir ~/html/cgi-bin
+cp qrypt.cgi ~/html/cgi-bin
+chmod g+rx ~/html/cgi-bin
+chmod g+rx ~/html/cgi-bin/qrypt.cgi
+ENDSSH
+
+cd ${currentDir}
